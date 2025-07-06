@@ -3,436 +3,250 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>2-Player PvP with Shop & 1 Life</title>
+<title>2P PvP Game - Skins, Shop, XP</title>
 <style>
   body {
-    margin:0; background:#222; color:#eee; font-family:sans-serif; user-select:none;
+    margin: 0;
+    font-family: Arial, sans-serif;
+    background: #111;
+    color: #fff;
+    user-select: none;
   }
-  #gameCanvas {
-    display:block;
-    margin: 20px auto;
-    background: linear-gradient(#5dade2, #1b4f72);
-    border: 2px solid #ddd;
+  canvas {
+    display: block;
+    margin: 0 auto;
+    background: linear-gradient(#87ceeb, #4682b4);
     image-rendering: pixelated;
+    border: 4px solid #444;
+    border-radius: 10px;
   }
   #ui, #menu, #shop {
-    width: 800px; margin: 10px auto; display: flex; justify-content: space-between; align-items:center;
-  }
-  #menu, #shop {
+    width: 800px;
+    margin: 10px auto;
+    display: flex;
+    justify-content: space-between;
     flex-wrap: wrap;
-    justify-content: center;
-    gap: 10px;
+    align-items: center;
   }
-  .btn, button {
-    padding: 8px 16px; font-size: 16px; cursor:pointer; border:none; border-radius:4px;
-    background:#3498db; color:#fff; transition: background 0.3s;
-  }
-  .btn:hover, button:hover {
-    background:#2980b9;
-  }
-  .skin {
-    width: 60px; height: 60px; border: 3px solid transparent; border-radius: 8px; cursor: pointer;
-    display:flex; justify-content:center; align-items:center; font-weight:bold; font-size:20px;
-    user-select:none;
-    transition: border-color 0.3s;
+  .button {
+    padding: 10px 20px;
+    background: #3498db;
     color: white;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 16px;
+    margin: 5px;
   }
-  .skin.locked {
-    filter: grayscale(90%);
-    cursor: not-allowed;
-    color: #555;
+  .button:hover {
+    background: #2980b9;
   }
-  .skin.selected {
-    border-color: gold;
+  .shop-item {
+    width: 100px;
+    height: 100px;
+    border: 2px solid #555;
+    margin: 10px;
+    text-align: center;
+    border-radius: 8px;
+    background: #222;
+  }
+  .shop-item.locked {
+    opacity: 0.5;
+  }
+  .shop-item span {
+    display: block;
+    margin-top: 5px;
+    font-size: 14px;
+    color: #ccc;
   }
 </style>
 </head>
 <body>
-
-<div id="menu" style="display:none;">
-  <h2 style="width:100%; text-align:center;">Main Menu</h2>
-  <button id="startGameBtn" style="margin-bottom:20px;">Start Game</button>
-  <button id="openShopBtn">Open Shop</button>
+<div id="menu">
+  <button class="button" onclick="startGame()">Start Game</button>
+  <button class="button" onclick="openShop('player1')">Player 1 Shop</button>
+  <button class="button" onclick="openShop('player2')">Player 2 Shop</button>
 </div>
-
-<div id="shop" style="display:none; flex-direction: column; max-width: 400px; margin: 20px auto;">
-  <h2>Shop (Spend XP)</h2>
-  <div id="shopItems" style="display:flex; flex-wrap: wrap; gap:10px;"></div>
-  <button id="backToMenuBtn" style="margin-top:10px; width: 150px; align-self:center;">Back to Menu</button>
+<div id="ui" style="display:none">
+  <div>Player 1 XP: <span id="p1xp">0</span></div>
+  <div>Player 2 XP: <span id="p2xp">0</span></div>
 </div>
-
-<div id="ui" style="display:none;">
-  <div>
-    <strong>Player 1 (WASD + F to shoot)</strong><br />
-    XP: <span id="p1XP">0</span> Skin: <span id="p1SkinName">red</span>
-  </div>
-  <div>
-    <strong>Player 2 (Arrow Keys + / to shoot)</strong><br />
-    XP: <span id="p2XP">0</span> Skin: <span id="p2SkinName">purple</span>
-  </div>
+<canvas id="gameCanvas" width="800" height="400"></canvas>
+<div id="shop" style="display:none">
+  <div style="width:100%;text-align:center;font-size:18px;">Shop - <span id="shopFor"></span></div>
+  <div id="shopItems" style="display:flex;flex-wrap:wrap;justify-content:center;width:100%"></div>
+  <button class="button" onclick="closeShop()">Back</button>
 </div>
-
-<canvas id="gameCanvas" width="800" height="400" style="display:none;"></canvas>
-
-<button id="restartBtn" style="display:none; margin:20px auto; display:block;">Restart Game</button>
-
 <script>
-(() => {
-  const canvas = document.getElementById('gameCanvas');
-  const ctx = canvas.getContext('2d');
-  const restartBtn = document.getElementById('restartBtn');
-  const menuDiv = document.getElementById('menu');
-  const shopDiv = document.getElementById('shop');
-  const uiDiv = document.getElementById('ui');
-  const startGameBtn = document.getElementById('startGameBtn');
-  const openShopBtn = document.getElementById('openShopBtn');
-  const backToMenuBtn = document.getElementById('backToMenuBtn');
-  const shopItemsDiv = document.getElementById('shopItems');
-  const p1XPSpan = document.getElementById('p1XP');
-  const p2XPSpan = document.getElementById('p2XP');
-  const p1SkinNameSpan = document.getElementById('p1SkinName');
-  const p2SkinNameSpan = document.getElementById('p2SkinName');
+const canvas = document.getElementById("gameCanvas");
+const ctx = canvas.getContext("2d");
+let keys = {};
 
-  const keys = {};
-  document.addEventListener('keydown', e => keys[e.key.toLowerCase()] = true);
-  document.addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
+document.addEventListener("keydown", e => keys[e.key.toLowerCase()] = true);
+document.addEventListener("keyup", e => keys[e.key.toLowerCase()] = false);
 
-  // Skins with costs for shop
-  const availableSkins = {
-    red: { color: '#e74c3c', cost: 0, name:'Red' },
-    green: { color: '#27ae60', cost: 100, name:'Green' },
-    blue: { color: '#2980b9', cost: 150, name:'Blue' },
-    purple: { color: '#8e44ad', cost: 0, name:'Purple' },
-    yellow: { color: '#f1c40f', cost: 100, name:'Yellow' },
-    orange: { color: '#d35400', cost: 150, name:'Orange' },
-  };
+let skins = {
+  red: { color: "#e74c3c", price: 0 },
+  green: { color: "#2ecc71", price: 100 },
+  blue: { color: "#3498db", price: 200 },
+  yellow: { color: "#f1c40f", price: 300 },
+};
 
-  // Player constructor
-  function Player(x, y, controls, skinKey, xp=0) {
-    this.x = x;
-    this.y = y;
-    this.width = 40;
-    this.height = 60;
-    this.vx = 0;
-    this.vy = 0;
-    this.speed = 5;
-    this.jumpPower = 15;
-    this.onGround = false;
-    this.color = availableSkins[skinKey].color || 'white';
-    this.health = 100;
-    this.lives = 1;  // Only 1 life
-    this.level = 1;
-    this.xp = xp;
-    this.controls = controls;
-    this.skinKey = skinKey;
-    this.facing = 1; // 1=right, -1=left
-    this.projectiles = [];
-    this.attackCooldown = 0;
+let unlocked = {
+  player1: ["red"],
+  player2: ["blue"]
+};
+
+let players = {
+  player1: {
+    x: 100, y: 300, vx: 0, vy: 0, color: "red", xp: 0, skin: "red", control: {l: 'a', r: 'd', u: 'w', atk: 'f'},
+    bullets: [], alive: true
+  },
+  player2: {
+    x: 600, y: 300, vx: 0, vy: 0, color: "blue", xp: 0, skin: "blue", control: {l: 'arrowleft', r: 'arrowright', u: 'arrowup', atk: '/'},
+    bullets: [], alive: true
   }
-  Player.prototype.draw = function() {
-    ctx.fillStyle = this.color;
-    ctx.fillRect(this.x, this.y, this.width, this.height);
-  };
-  Player.prototype.move = function(platforms) {
-    if(this.lives <= 0) return; // dead no move
+};
 
-    // Horizontal Movement
-    if(keys[this.controls.left]) {
-      this.vx = -this.speed;
-      this.facing = -1;
-    } else if(keys[this.controls.right]) {
-      this.vx = this.speed;
-      this.facing = 1;
-    } else {
-      this.vx = 0;
-    }
+let platforms = [{x:0,y:360,w:800,h:40},{x:300,y:280,w:200,h:20}];
 
-    // Jump
-    if(keys[this.controls.up] && this.onGround) {
-      this.vy = -this.jumpPower;
-      this.onGround = false;
-    }
+function drawPlayer(p) {
+  ctx.fillStyle = skins[p.skin].color;
+  ctx.fillRect(p.x, p.y, 40, 60);
+}
 
-    // Gravity
-    this.vy += 0.8;
-    if(this.vy > 15) this.vy = 15;
+function drawPlatforms() {
+  ctx.fillStyle = "#666";
+  platforms.forEach(p => ctx.fillRect(p.x, p.y, p.w, p.h));
+}
 
-    // Apply velocity
-    this.x += this.vx;
-    this.y += this.vy;
+function movePlayer(p) {
+  let c = p.control;
+  if(keys[c.l]) p.vx = -5;
+  else if(keys[c.r]) p.vx = 5;
+  else p.vx = 0;
+  if(keys[c.u] && onGround(p)) p.vy = -12;
 
-    // Floor/platform collision
-    this.onGround = false;
-    platforms.forEach(p => {
-      if(this.x < p.x + p.width && this.x + this.width > p.x &&
-         this.y < p.y + p.height && this.y + this.height > p.y) {
-        if(this.vy > 0 && this.y + this.height - this.vy <= p.y) {
-          this.y = p.y - this.height;
-          this.vy = 0;
-          this.onGround = true;
-        } else if(this.vy < 0 && this.y >= p.y + p.height - this.vy) {
-          this.y = p.y + p.height;
-          this.vy = 0;
-        } else if(this.vx > 0) {
-          this.x = p.x - this.width;
-        } else if(this.vx < 0) {
-          this.x = p.x + p.width;
-        }
-      }
-    });
+  p.vy += 0.6;
+  p.x += p.vx;
+  p.y += p.vy;
 
-    // Keep inside canvas
-    if(this.x < 0) this.x = 0;
-    if(this.x + this.width > canvas.width) this.x = canvas.width - this.width;
-    if(this.y > canvas.height) { // Fell off = die immediately
-      this.loseLife();
-    }
-
-    if(this.attackCooldown > 0) this.attackCooldown--;
-  };
-  Player.prototype.shoot = function() {
-    if(this.lives <= 0) return;
-    if(this.attackCooldown > 0) return;
-    const projSpeed = 10;
-    const projSize = 10;
-    this.projectiles.push({
-      x: this.x + (this.facing === 1 ? this.width : -projSize),
-      y: this.y + this.height / 2 - projSize/2,
-      vx: this.facing * projSpeed,
-      vy: 0,
-      width: projSize,
-      height: projSize,
-      owner: this
-    });
-    this.attackCooldown = 20;
-  };
-  Player.prototype.loseLife = function() {
-    this.lives = 0;
-    this.health = 0;
-    goToMenu();
-  };
-  Player.prototype.takeDamage = function(dmg, fromPlayer) {
-    if(this.lives <= 0) return;
-    this.health -= dmg;
-    if(this.health <= 0) {
-      this.loseLife();
-      if(fromPlayer && fromPlayer !== this) {
-        fromPlayer.gainXP(50);
+  platforms.forEach(plat => {
+    if(p.x < plat.x + plat.w && p.x + 40 > plat.x && p.y < plat.y + plat.h && p.y + 60 > plat.y) {
+      if(p.vy > 0) {
+        p.y = plat.y - 60;
+        p.vy = 0;
       }
     }
-  };
-  Player.prototype.gainXP = function(amount) {
-    this.xp += amount;
-  };
+  });
+}
 
-  // Platforms
-  const platforms = [
-    {x: 0, y: 360, width: 800, height: 40},
-    {x: 200, y: 300, width: 120, height: 20},
-    {x: 500, y: 250, width: 120, height: 20},
-    {x: 350, y: 200, width: 120, height: 20},
-  ];
+function onGround(p) {
+  return platforms.some(pl => p.y + 61 >= pl.y && p.y + 61 <= pl.y + 5 && p.x + 40 > pl.x && p.x < pl.x + pl.w);
+}
 
-  // Players start with default skins & XP
-  let player1 = new Player(100, 300, {left:'a', right:'d', up:'w', attack:'f'}, 'red');
-  let player2 = new Player(600, 300, {left:'arrowleft', right:'arrowright', up:'arrowup', attack:'/'}, 'purple');
-
-  // UI update
-  function updateUI() {
-    p1XPSpan.textContent = player1.xp;
-    p2XPSpan.textContent = player2.xp;
-    p1SkinNameSpan.textContent = capitalize(player1.skinKey);
-    p2SkinNameSpan.textContent = capitalize(player2.skinKey);
+function shoot(player) {
+  if(player.alive) {
+    player.bullets.push({x: player.x + 20, y: player.y + 30, vx: player === players.player1 ? 7 : -7});
   }
-  function capitalize(str) {
-    return str.charAt(0).toUpperCase() + str.slice(1);
-  }
+}
 
-  // Handle projectiles
-  function handleProjectiles() {
-    [player1, player2].forEach(p => {
-      p.projectiles.forEach((proj, i) => {
-        proj.x += proj.vx;
-        proj.y += proj.vy;
-        if(proj.x < 0 || proj.x > canvas.width) {
-          p.projectiles.splice(i,1);
-          return;
-        }
-        let other = (p === player1) ? player2 : player1;
-        if(other.lives > 0 && proj.x < other.x + other.width && proj.x + proj.width > other.x &&
-          proj.y < other.y + other.height && proj.y + proj.height > other.y) {
-          other.takeDamage(20, p);
-          p.projectiles.splice(i,1);
-        }
-      });
+function updateBullets() {
+  [players.player1, players.player2].forEach(p => {
+    p.bullets.forEach(b => {
+      b.x += b.vx;
     });
-  }
+    p.bullets = p.bullets.filter(b => b.x > 0 && b.x < 800);
+  });
 
-  function drawPlatforms() {
-    ctx.fillStyle = '#666';
-    platforms.forEach(p => ctx.fillRect(p.x, p.y, p.width, p.height));
-  }
-  function drawProjectiles() {
-    ctx.fillStyle = 'black'; // black bullets
-    [player1, player2].forEach(p => {
-      p.projectiles.forEach(proj => {
-        ctx.fillRect(proj.x, proj.y, proj.width, proj.height);
-      });
-    });
-  }
+  players.player1.bullets.forEach(b => {
+    if(collide(b, players.player2)) kill(players.player2, players.player1);
+  });
+  players.player2.bullets.forEach(b => {
+    if(collide(b, players.player1)) kill(players.player1, players.player2);
+  });
+}
 
-  function gameLoop() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+function collide(b, p) {
+  return b.x > p.x && b.x < p.x+40 && b.y > p.y && b.y < p.y+60;
+}
 
-    drawPlatforms();
-
-    player1.move(platforms);
-    player2.move(platforms);
-
-    if(keys[player1.controls.attack]) player1.shoot();
-    if(keys[player2.controls.attack]) player2.shoot();
-
-    handleProjectiles();
-
-    player1.draw();
-    player2.draw();
-    drawProjectiles();
-
-    updateUI();
-
-    requestAnimationFrame(gameLoop);
-  }
-
-  // MAIN MENU & SHOP LOGIC
-
-  // Player-owned skin unlocks, starts with default skins only
-  let unlockedSkins = {
-    player1: ['red'],
-    player2: ['purple'],
-  };
-
-  // Shop items array (skinKey)
-  const shopItems = Object.entries(availableSkins).map(([key, val]) => ({
-    key,
-    name: val.name,
-    cost: val.cost,
-    color: val.color
-  }));
-
-  // Render shop items
-  function renderShop() {
-    shopItemsDiv.innerHTML = '';
-    const currentPlayer = shopPlayerSelect;
-    shopItems.forEach(item => {
-      const div = document.createElement('div');
-      div.className = 'skin';
-      div.style.backgroundColor = item.color;
-      div.textContent = item.name;
-      if(unlockedSkins[currentPlayer].includes(item.key) || item.cost === 0) {
-        div.classList.remove('locked');
-      } else {
-        div.classList.add('locked');
-        div.textContent += ` (${item.cost} XP)`;
-      }
-      div.onclick = () => {
-        if(unlockedSkins[currentPlayer].includes(item.key)) {
-          // Select skin
-          if(currentPlayer === 'player1') {
-            player1.skinKey = item.key;
-            player1.color = item.color;
-          } else {
-            player2.skinKey = item.key;
-            player2.color = item.color;
-          }
-          updateUI();
-          alert(`Selected skin ${item.name} for ${currentPlayer}`);
-        } else {
-          // Buy skin if enough XP
-          let playerXP = currentPlayer === 'player1' ? player1.xp : player2.xp;
-          if(playerXP >= item.cost) {
-            if(currentPlayer === 'player1') {
-              player1.xp -= item.cost;
-              player1.skinKey = item.key;
-              player1.color = item.color;
-            } else {
-              player2.xp -= item.cost;
-              player2.skinKey = item.key;
-              player2.color = item.color;
-            }
-            unlockedSkins[currentPlayer].push(item.key);
-            updateUI();
-            renderShop();
-            alert(`Bought and selected skin ${item.name} for ${currentPlayer}`);
-          } else {
-            alert('Not enough XP to buy this skin!');
-          }
-        }
-      };
-      shopItemsDiv.appendChild(div);
-    });
-  }
-
-  // Current player in shop (player1 or player2)
-  let shopPlayerSelect = 'player1';
-
-  // Show/hide UI states
-  function showMenu() {
-    menuDiv.style.display = 'flex';
-    shopDiv.style.display = 'none';
-    uiDiv.style.display = 'none';
-    canvas.style.display = 'none';
-    restartBtn.style.display = 'none';
-  }
-  function showShop() {
-    menuDiv.style.display = 'none';
-    shopDiv.style.display = 'flex';
-    uiDiv.style.display = 'none';
-    canvas.style.display = 'none';
-    restartBtn.style.display = 'none';
-    renderShop();
-  }
-  function showGame() {
-    menuDiv.style.display = 'none';
-    shopDiv.style.display = 'none';
-    uiDiv.style.display = 'flex';
-    canvas.style.display = 'block';
-    restartBtn.style.display = 'none';
-  }
-
-  // Go to main menu on death
-  function goToMenu() {
-    alert('Game Over! Returning to Main Menu.');
-    showMenu();
-  }
-
-  startGameBtn.onclick = () => {
-    showGame();
-    resetGame();
-  };
-  openShopBtn.onclick = () => {
-    // Ask which player wants to shop first
-    let p = prompt("Shop for Player 1 or Player 2? Enter 1 or 2", "1");
-    if(p === '2') shopPlayerSelect = 'player2';
-    else shopPlayerSelect = 'player1';
-    showShop();
-  };
-  backToMenuBtn.onclick = () => {
-    showMenu();
-  };
-  restartBtn.onclick = () => {
-    showGame();
-    resetGame();
-  };
-
-  // Reset game state for new game
-  function resetGame() {
-    player1 = new Player(100, 300, {left:'a', right:'d', up:'w', attack:'f'}, player1.skinKey, player1.xp);
-    player2 = new Player(600, 300, {left:'arrowleft', right:'arrowright', up:'arrowup', attack:'/'}, player2.skinKey, player2.xp);
-  }
-
+function kill(victim, attacker) {
+  victim.alive = false;
+  attacker.xp += 50;
+  document.getElementById("p1xp").textContent = players.player1.xp;
+  document.getElementById("p2xp").textContent = players.player2.xp;
+  alert(attacker === players.player1 ? "Player 1 wins!" : "Player 2 wins!");
   showMenu();
-})();
-</script>
+}
 
+function showMenu() {
+  document.getElementById("menu").style.display = "flex";
+  document.getElementById("ui").style.display = "none";
+  canvas.style.display = "none";
+}
+
+function startGame() {
+  Object.assign(players.player1, {x:100, y:300, vy:0, alive:true, bullets:[]});
+  Object.assign(players.player2, {x:600, y:300, vy:0, alive:true, bullets:[]});
+  canvas.style.display = "block";
+  document.getElementById("menu").style.display = "none";
+  document.getElementById("ui").style.display = "flex";
+  loop();
+}
+
+function loop() {
+  ctx.clearRect(0,0,800,400);
+  drawPlatforms();
+  Object.values(players).forEach(p => {
+    if(p.alive) movePlayer(p);
+    drawPlayer(p);
+  });
+  updateBullets();
+  drawBullets();
+  if(players.player1.alive && players.player2.alive) requestAnimationFrame(loop);
+}
+
+function drawBullets() {
+  ctx.fillStyle = "#000";
+  Object.values(players).forEach(p => {
+    p.bullets.forEach(b => ctx.fillRect(b.x, b.y, 10, 5));
+  });
+}
+
+function openShop(playerKey) {
+  document.getElementById("menu").style.display = "none";
+  document.getElementById("shop").style.display = "flex";
+  document.getElementById("shopFor").textContent = playerKey;
+  const items = document.getElementById("shopItems");
+  items.innerHTML = "";
+  Object.entries(skins).forEach(([k,v]) => {
+    const div = document.createElement("div");
+    div.className = "shop-item";
+    div.style.backgroundColor = v.color;
+    div.innerHTML = `<b>${k}</b><span>${v.price} XP</span>`;
+    if(!unlocked[playerKey].includes(k) && players[playerKey].xp >= v.price) {
+      div.onclick = () => {
+        unlocked[playerKey].push(k);
+        players[playerKey].skin = k;
+        closeShop();
+      }
+    } else if(unlocked[playerKey].includes(k)) {
+      div.onclick = () => {
+        players[playerKey].skin = k;
+        closeShop();
+      }
+    } else {
+      div.classList.add("locked");
+    }
+    items.appendChild(div);
+  });
+}
+
+function closeShop() {
+  document.getElementById("shop").style.display = "none";
+  document.getElementById("menu").style.display = "flex";
+}
+</script>
 </body>
 </html>
