@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>2-Player PvP Game with Level Ups & Skins</title>
+<title>2-Player PvP with Shop & 1 Life</title>
 <style>
   body {
     margin:0; background:#222; color:#eee; font-family:sans-serif; user-select:none;
@@ -15,53 +15,65 @@
     border: 2px solid #ddd;
     image-rendering: pixelated;
   }
-  #ui {
-    width: 800px; margin: 0 auto; display:flex; justify-content: space-between; align-items:center;
+  #ui, #menu, #shop {
+    width: 800px; margin: 10px auto; display: flex; justify-content: space-between; align-items:center;
   }
-  #skinSelect {
-    margin: 20px auto; width: 800px; display: flex; justify-content: center; gap: 20px;
+  #menu, #shop {
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 10px;
+  }
+  .btn, button {
+    padding: 8px 16px; font-size: 16px; cursor:pointer; border:none; border-radius:4px;
+    background:#3498db; color:#fff; transition: background 0.3s;
+  }
+  .btn:hover, button:hover {
+    background:#2980b9;
   }
   .skin {
     width: 60px; height: 60px; border: 3px solid transparent; border-radius: 8px; cursor: pointer;
     display:flex; justify-content:center; align-items:center; font-weight:bold; font-size:20px;
     user-select:none;
     transition: border-color 0.3s;
+    color: white;
+  }
+  .skin.locked {
+    filter: grayscale(90%);
+    cursor: not-allowed;
+    color: #555;
   }
   .skin.selected {
     border-color: gold;
-  }
-  button {
-    padding: 8px 16px; font-size: 16px; cursor:pointer; border:none; border-radius:4px;
-    background:#3498db; color:#fff; transition: background 0.3s;
-  }
-  button:hover {
-    background:#2980b9;
   }
 </style>
 </head>
 <body>
 
-<div id="skinSelect">
-  <div class="skin selected" data-player="1" data-skin="red" style="background:#e74c3c; color:#fff;">1</div>
-  <div class="skin" data-player="1" data-skin="green" style="background:#27ae60; color:#fff;">1</div>
-  <div class="skin" data-player="1" data-skin="blue" style="background:#2980b9; color:#fff;">1</div>
-  <div class="skin" data-player="2" data-skin="purple" style="background:#8e44ad; color:#fff;">2</div>
-  <div class="skin" data-player="2" data-skin="yellow" style="background:#f1c40f; color:#000;">2</div>
-  <div class="skin" data-player="2" data-skin="orange" style="background:#d35400; color:#fff;">2</div>
+<div id="menu" style="display:none;">
+  <h2 style="width:100%; text-align:center;">Main Menu</h2>
+  <button id="startGameBtn" style="margin-bottom:20px;">Start Game</button>
+  <button id="openShopBtn">Open Shop</button>
 </div>
 
-<div id="ui">
+<div id="shop" style="display:none; flex-direction: column; max-width: 400px; margin: 20px auto;">
+  <h2>Shop (Spend XP)</h2>
+  <div id="shopItems" style="display:flex; flex-wrap: wrap; gap:10px;"></div>
+  <button id="backToMenuBtn" style="margin-top:10px; width: 150px; align-self:center;">Back to Menu</button>
+</div>
+
+<div id="ui" style="display:none;">
   <div>
     <strong>Player 1 (WASD + F to shoot)</strong><br />
-    Level: <span id="p1Level">1</span> XP: <span id="p1XP">0</span> Lives: <span id="p1Lives">3</span> Health: <span id="p1Health">100</span>
+    XP: <span id="p1XP">0</span> Skin: <span id="p1SkinName">red</span>
   </div>
   <div>
     <strong>Player 2 (Arrow Keys + / to shoot)</strong><br />
-    Level: <span id="p2Level">1</span> XP: <span id="p2XP">0</span> Lives: <span id="p2Lives">3</span> Health: <span id="p2Health">100</span>
+    XP: <span id="p2XP">0</span> Skin: <span id="p2SkinName">purple</span>
   </div>
 </div>
 
-<canvas id="gameCanvas" width="800" height="400"></canvas>
+<canvas id="gameCanvas" width="800" height="400" style="display:none;"></canvas>
+
 <button id="restartBtn" style="display:none; margin:20px auto; display:block;">Restart Game</button>
 
 <script>
@@ -69,23 +81,34 @@
   const canvas = document.getElementById('gameCanvas');
   const ctx = canvas.getContext('2d');
   const restartBtn = document.getElementById('restartBtn');
-  const skinSelect = document.getElementById('skinSelect');
+  const menuDiv = document.getElementById('menu');
+  const shopDiv = document.getElementById('shop');
+  const uiDiv = document.getElementById('ui');
+  const startGameBtn = document.getElementById('startGameBtn');
+  const openShopBtn = document.getElementById('openShopBtn');
+  const backToMenuBtn = document.getElementById('backToMenuBtn');
+  const shopItemsDiv = document.getElementById('shopItems');
+  const p1XPSpan = document.getElementById('p1XP');
+  const p2XPSpan = document.getElementById('p2XP');
+  const p1SkinNameSpan = document.getElementById('p1SkinName');
+  const p2SkinNameSpan = document.getElementById('p2SkinName');
+
   const keys = {};
   document.addEventListener('keydown', e => keys[e.key.toLowerCase()] = true);
   document.addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
 
-  // Player skins data
-  const skinColors = {
-    red: '#e74c3c',
-    green: '#27ae60',
-    blue: '#2980b9',
-    purple: '#8e44ad',
-    yellow: '#f1c40f',
-    orange: '#d35400',
+  // Skins with costs for shop
+  const availableSkins = {
+    red: { color: '#e74c3c', cost: 0, name:'Red' },
+    green: { color: '#27ae60', cost: 100, name:'Green' },
+    blue: { color: '#2980b9', cost: 150, name:'Blue' },
+    purple: { color: '#8e44ad', cost: 0, name:'Purple' },
+    yellow: { color: '#f1c40f', cost: 100, name:'Yellow' },
+    orange: { color: '#d35400', cost: 150, name:'Orange' },
   };
 
   // Player constructor
-  function Player(x, y, controls, skinKey) {
+  function Player(x, y, controls, skinKey, xp=0) {
     this.x = x;
     this.y = y;
     this.width = 40;
@@ -95,11 +118,11 @@
     this.speed = 5;
     this.jumpPower = 15;
     this.onGround = false;
-    this.color = skinColors[skinKey] || 'white';
+    this.color = availableSkins[skinKey].color || 'white';
     this.health = 100;
-    this.lives = 3;
+    this.lives = 1;  // Only 1 life
     this.level = 1;
-    this.xp = 0;
+    this.xp = xp;
     this.controls = controls;
     this.skinKey = skinKey;
     this.facing = 1; // 1=right, -1=left
@@ -138,12 +161,11 @@
     this.x += this.vx;
     this.y += this.vy;
 
-    // Simple floor collision
+    // Floor/platform collision
     this.onGround = false;
     platforms.forEach(p => {
       if(this.x < p.x + p.width && this.x + this.width > p.x &&
          this.y < p.y + p.height && this.y + this.height > p.y) {
-        // Collision detected, resolve:
         if(this.vy > 0 && this.y + this.height - this.vy <= p.y) {
           this.y = p.y - this.height;
           this.vy = 0;
@@ -159,18 +181,17 @@
       }
     });
 
-    // Keep inside canvas bounds
+    // Keep inside canvas
     if(this.x < 0) this.x = 0;
     if(this.x + this.width > canvas.width) this.x = canvas.width - this.width;
-    if(this.y > canvas.height) { // Fell off
+    if(this.y > canvas.height) { // Fell off = die immediately
       this.loseLife();
     }
 
-    // Attack cooldown decrement
     if(this.attackCooldown > 0) this.attackCooldown--;
   };
   Player.prototype.shoot = function() {
-    if(this.lives <= 0) return; // dead no shoot
+    if(this.lives <= 0) return;
     if(this.attackCooldown > 0) return;
     const projSpeed = 10;
     const projSize = 10;
@@ -183,22 +204,12 @@
       height: projSize,
       owner: this
     });
-    this.attackCooldown = 20; // cooldown frames
+    this.attackCooldown = 20;
   };
   Player.prototype.loseLife = function() {
-    if(this.lives > 0) {
-      this.lives--;
-      this.health = 100;
-      // Respawn
-      if(this === player1) {
-        this.x = 100; this.y = 300;
-      } else {
-        this.x = 600; this.y = 300;
-      }
-      if(this.lives <= 0) {
-        this.health = 0;
-      }
-    }
+    this.lives = 0;
+    this.health = 0;
+    goToMenu();
   };
   Player.prototype.takeDamage = function(dmg, fromPlayer) {
     if(this.lives <= 0) return;
@@ -206,22 +217,15 @@
     if(this.health <= 0) {
       this.loseLife();
       if(fromPlayer && fromPlayer !== this) {
-        fromPlayer.gainXP(20);
+        fromPlayer.gainXP(50);
       }
     }
   };
   Player.prototype.gainXP = function(amount) {
     this.xp += amount;
-    const needed = 100 + this.level * 50;
-    if(this.xp >= needed) {
-      this.xp -= needed;
-      this.level++;
-      this.health = 100;
-      this.lives++;
-    }
   };
 
-  // Platforms array
+  // Platforms
   const platforms = [
     {x: 0, y: 360, width: 800, height: 40},
     {x: 200, y: 300, width: 120, height: 20},
@@ -229,21 +233,19 @@
     {x: 350, y: 200, width: 120, height: 20},
   ];
 
-  // Create players
+  // Players start with default skins & XP
   let player1 = new Player(100, 300, {left:'a', right:'d', up:'w', attack:'f'}, 'red');
   let player2 = new Player(600, 300, {left:'arrowleft', right:'arrowright', up:'arrowup', attack:'/'}, 'purple');
 
-  // Update UI function
+  // UI update
   function updateUI() {
-    document.getElementById('p1Level').textContent = player1.level;
-    document.getElementById('p1XP').textContent = player1.xp;
-    document.getElementById('p1Lives').textContent = player1.lives;
-    document.getElementById('p1Health').textContent = player1.health > 0 ? player1.health : 0;
-
-    document.getElementById('p2Level').textContent = player2.level;
-    document.getElementById('p2XP').textContent = player2.xp;
-    document.getElementById('p2Lives').textContent = player2.lives;
-    document.getElementById('p2Health').textContent = player2.health > 0 ? player2.health : 0;
+    p1XPSpan.textContent = player1.xp;
+    p2XPSpan.textContent = player2.xp;
+    p1SkinNameSpan.textContent = capitalize(player1.skinKey);
+    p2SkinNameSpan.textContent = capitalize(player2.skinKey);
+  }
+  function capitalize(str) {
+    return str.charAt(0).toUpperCase() + str.slice(1);
   }
 
   // Handle projectiles
@@ -252,12 +254,10 @@
       p.projectiles.forEach((proj, i) => {
         proj.x += proj.vx;
         proj.y += proj.vy;
-        // Remove if offscreen
         if(proj.x < 0 || proj.x > canvas.width) {
           p.projectiles.splice(i,1);
           return;
         }
-        // Check collision with other player
         let other = (p === player1) ? player2 : player1;
         if(other.lives > 0 && proj.x < other.x + other.width && proj.x + proj.width > other.x &&
           proj.y < other.y + other.height && proj.y + proj.height > other.y) {
@@ -268,30 +268,19 @@
     });
   }
 
-  // Draw platforms
   function drawPlatforms() {
     ctx.fillStyle = '#666';
     platforms.forEach(p => ctx.fillRect(p.x, p.y, p.width, p.height));
   }
-
-  // Draw projectiles
   function drawProjectiles() {
+    ctx.fillStyle = 'black'; // black bullets
     [player1, player2].forEach(p => {
-      ctx.fillStyle = p.color;
       p.projectiles.forEach(proj => {
         ctx.fillRect(proj.x, proj.y, proj.width, proj.height);
       });
     });
   }
 
-  // Game over check
-  function checkGameOver() {
-    if(player1.lives <= 0 || player2.lives <= 0) {
-      restartBtn.style.display = 'block';
-    }
-  }
-
-  // Game loop
   function gameLoop() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -300,7 +289,6 @@
     player1.move(platforms);
     player2.move(platforms);
 
-    // Handle shooting keys
     if(keys[player1.controls.attack]) player1.shoot();
     if(keys[player2.controls.attack]) player2.shoot();
 
@@ -311,43 +299,140 @@
     drawProjectiles();
 
     updateUI();
-    checkGameOver();
 
     requestAnimationFrame(gameLoop);
   }
 
-  // Restart game
-  restartBtn.onclick = () => {
-    player1 = new Player(100, 300, player1.controls, player1.skinKey);
-    player2 = new Player(600, 300, player2.controls, player2.skinKey);
-    restartBtn.style.display = 'none';
+  // MAIN MENU & SHOP LOGIC
+
+  // Player-owned skin unlocks, starts with default skins only
+  let unlockedSkins = {
+    player1: ['red'],
+    player2: ['purple'],
   };
 
-  // Skin selection handling
-  skinSelect.addEventListener('click', e => {
-    const skinDiv = e.target.closest('.skin');
-    if(!skinDiv) return;
+  // Shop items array (skinKey)
+  const shopItems = Object.entries(availableSkins).map(([key, val]) => ({
+    key,
+    name: val.name,
+    cost: val.cost,
+    color: val.color
+  }));
 
-    const playerNum = parseInt(skinDiv.dataset.player);
-    const skinKey = skinDiv.dataset.skin;
-
-    // Deselect old skins for that player
-    [...skinSelect.children].forEach(s => {
-      if(parseInt(s.dataset.player) === playerNum) s.classList.remove('selected');
+  // Render shop items
+  function renderShop() {
+    shopItemsDiv.innerHTML = '';
+    const currentPlayer = shopPlayerSelect;
+    shopItems.forEach(item => {
+      const div = document.createElement('div');
+      div.className = 'skin';
+      div.style.backgroundColor = item.color;
+      div.textContent = item.name;
+      if(unlockedSkins[currentPlayer].includes(item.key) || item.cost === 0) {
+        div.classList.remove('locked');
+      } else {
+        div.classList.add('locked');
+        div.textContent += ` (${item.cost} XP)`;
+      }
+      div.onclick = () => {
+        if(unlockedSkins[currentPlayer].includes(item.key)) {
+          // Select skin
+          if(currentPlayer === 'player1') {
+            player1.skinKey = item.key;
+            player1.color = item.color;
+          } else {
+            player2.skinKey = item.key;
+            player2.color = item.color;
+          }
+          updateUI();
+          alert(`Selected skin ${item.name} for ${currentPlayer}`);
+        } else {
+          // Buy skin if enough XP
+          let playerXP = currentPlayer === 'player1' ? player1.xp : player2.xp;
+          if(playerXP >= item.cost) {
+            if(currentPlayer === 'player1') {
+              player1.xp -= item.cost;
+              player1.skinKey = item.key;
+              player1.color = item.color;
+            } else {
+              player2.xp -= item.cost;
+              player2.skinKey = item.key;
+              player2.color = item.color;
+            }
+            unlockedSkins[currentPlayer].push(item.key);
+            updateUI();
+            renderShop();
+            alert(`Bought and selected skin ${item.name} for ${currentPlayer}`);
+          } else {
+            alert('Not enough XP to buy this skin!');
+          }
+        }
+      };
+      shopItemsDiv.appendChild(div);
     });
-    skinDiv.classList.add('selected');
+  }
 
-    if(playerNum === 1) {
-      player1.color = skinColors[skinKey];
-      player1.skinKey = skinKey;
-    } else if(playerNum === 2) {
-      player2.color = skinColors[skinKey];
-      player2.skinKey = skinKey;
-    }
-  });
+  // Current player in shop (player1 or player2)
+  let shopPlayerSelect = 'player1';
 
-  gameLoop();
+  // Show/hide UI states
+  function showMenu() {
+    menuDiv.style.display = 'flex';
+    shopDiv.style.display = 'none';
+    uiDiv.style.display = 'none';
+    canvas.style.display = 'none';
+    restartBtn.style.display = 'none';
+  }
+  function showShop() {
+    menuDiv.style.display = 'none';
+    shopDiv.style.display = 'flex';
+    uiDiv.style.display = 'none';
+    canvas.style.display = 'none';
+    restartBtn.style.display = 'none';
+    renderShop();
+  }
+  function showGame() {
+    menuDiv.style.display = 'none';
+    shopDiv.style.display = 'none';
+    uiDiv.style.display = 'flex';
+    canvas.style.display = 'block';
+    restartBtn.style.display = 'none';
+  }
+
+  // Go to main menu on death
+  function goToMenu() {
+    alert('Game Over! Returning to Main Menu.');
+    showMenu();
+  }
+
+  startGameBtn.onclick = () => {
+    showGame();
+    resetGame();
+  };
+  openShopBtn.onclick = () => {
+    // Ask which player wants to shop first
+    let p = prompt("Shop for Player 1 or Player 2? Enter 1 or 2", "1");
+    if(p === '2') shopPlayerSelect = 'player2';
+    else shopPlayerSelect = 'player1';
+    showShop();
+  };
+  backToMenuBtn.onclick = () => {
+    showMenu();
+  };
+  restartBtn.onclick = () => {
+    showGame();
+    resetGame();
+  };
+
+  // Reset game state for new game
+  function resetGame() {
+    player1 = new Player(100, 300, {left:'a', right:'d', up:'w', attack:'f'}, player1.skinKey, player1.xp);
+    player2 = new Player(600, 300, {left:'arrowleft', right:'arrowright', up:'arrowup', attack:'/'}, player2.skinKey, player2.xp);
+  }
+
+  showMenu();
 })();
 </script>
+
 </body>
 </html>
